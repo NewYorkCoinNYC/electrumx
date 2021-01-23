@@ -10,8 +10,7 @@ before_install:
   - tar -xzvf leveldb_1.20.orig.tar.gz
   - pushd leveldb-1.20 && make && sudo mv out-shared/libleveldb.* /usr/local/lib && sudo cp -R include/leveldb /usr/local/include && sudo ldconfig && popd
 python:
-  - "3.6"
-  - "3.6-dev"
+  - "3.7"
   - "3.7-dev"
   - "nightly"
 # command to install dependencies
@@ -46,7 +45,7 @@ script:
   - sh -c "cd docs && make html"
 # Dont report coverage from nightly
 after_success:
-  - if [[ $(python3 -V 2>&1) == *"Python 3.6"* ]]; then
+  - if [[ $(python3 -V 2>&1) == *"Python 3.7"* ]]; then
       pip install python-coveralls;
       coveralls;
     fi

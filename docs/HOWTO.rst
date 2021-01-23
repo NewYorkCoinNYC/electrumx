@@ -15,7 +15,7 @@ small - pull requests are welcome.
 ================ ========================
 Package          Notes
 ================ ========================
-Python3          ElectrumX uses asyncio.  Python version >= 3.6 is
+Python3          ElectrumX uses asyncio.  Python version >= 3.7 is
                  **required**.
 `aiohttp`_       Python library for asynchronous HTTP.  Version >=
                  2.0 required.
@@ -208,12 +208,12 @@ Once configured you may want to start ElectrumX at boot::
    :file:`.service` file.
 
 
-Installing Python 3.6 under Ubuntu
+Installing Python 3.7 under Ubuntu
 ----------------------------------
 
 Many Ubuntu distributions have an incompatible Python version baked
-in.  Because of this, it is easier to install Python 3.6.  See
-`contrib/python3.6/python-3.6.sh`_.
+in.  Because of this, it is easier to install Python 3.7.  See
+`contrib/python3.7/python-3.7.sh`_.
 
 
 Installing on Raspberry Pi 3
@@ -435,6 +435,6 @@ You can then set the port as follows and advertise the service externally on the
 .. _`aiohttp`: https://pypi.python.org/pypi/aiohttp
 .. _`pylru`: https://pypi.python.org/pypi/pylru
 .. _`x11_hash`: https://pypi.python.org/pypi/x11_hash
-.. _`contrib/python3.6/python-3.6.sh`: https://github.com/NewYorkCoinNYC/electrumx/blob/master/contrib/python3.6/python-3.6.sh
+.. _`contrib/python3.7/python-3.7.sh`: https://github.com/NewYorkCoinNYC/electrumx/blob/master/contrib/python3.7/python-3.7.sh
 .. _`contrib/raspberrypi3/install_electrumx.sh`: https://github.com/NewYorkCoinNYC/electrumx/blob/master/contrib/raspberrypi3/install_electrumx.sh
 .. _`contrib/raspberrypi3/run_electrumx.sh`: https://github.com/NewYorkCoinNYC/electrumx/blob/master/contrib/raspberrypi3/run_electrumx.sh

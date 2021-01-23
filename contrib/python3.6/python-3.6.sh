@@ -1,13 +1,13 @@
 #!/bin/sh
 ###########################
-#Installation of Python 3.6
+#Installation of Python 3.7
 ###########################
 
-sudo add-apt-repository ppa:jonathonf/python-3.6
-sudo apt-get update && sudo apt-get install python3.6 python3.6-dev
+sudo add-apt-repository ppa:jonathonf/python-3.7
+sudo apt-get update && sudo apt-get install python3.7 python3.7-dev
 
 cd ~
 git clone https://github.com/NewYorkCoinNYC/electrumx.git
 cd electrumx
-sudo python3.6 setup.py install
+sudo python3.7 setup.py install
 
