@@ -56,12 +56,8 @@ def test_transaction(transaction_details):
         spk = vout[i]['scriptPubKey']
         tx_pks = tx.outputs[i].pk_script
         assert spk['hex'] == tx_pks.hex()
-        if "addresses" in spk:
-            assert len(spk["addresses"]) == 1
-            address = spk["addresses"][0]
-        else:
-            address = spk["address"]
-        assert coin.address_to_hashX(address) == coin.hashX_from_script(tx_pks)
+        assert coin.address_to_hashX(spk['address']) == \
+               coin.hashX_from_script(tx_pks)
         if issubclass(coin, Namecoin):
             if "nameOp" not in spk or "name" not in spk["nameOp"]:
                 assert coin.name_hashX_from_script(tx_pks) is None

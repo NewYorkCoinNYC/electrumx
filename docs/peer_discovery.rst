@@ -3,7 +3,7 @@
 Peer Discovery
 ==============
 
-This was implemented in ElectrumX as of version 0.11.0.  Support for
+This was imlpemented in ElectrumX as of version 0.11.0.  Support for
 IRC peer discovery was removed in ElectrumX version 1.2.1.
 
 The :dfn:`peer database` is an in-memory store of peers with at least
@@ -25,7 +25,7 @@ process.  Ideally it should have at least 4 servers that have shown
 commitment to reliable service.
 
 In ElectrumX this is a per-coin property in `lib/coins.py
-<https://github.com/kyuupichan/electrumx/blob/master/electrumx/lib/coins.py>`_.
+<https://github.com/NewYorkCoinNYC/electrumx/blob/master/lib/coins.py>`_.
 
 
 server.peers.subscribe

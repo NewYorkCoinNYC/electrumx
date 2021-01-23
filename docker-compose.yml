@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+  electrumx:
+    build: .
+    ports:
+      - '50001:50001'
+      - '50002:50002'
+    volumes:
+      - db-data:/database
+
+volumes:
+  db-data:

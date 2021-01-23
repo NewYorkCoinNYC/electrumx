@@ -1,35 +1,26 @@
-.. image:: https://travis-ci.org/kyuupichan/electrumx.svg?branch=master
-    :target: https://travis-ci.org/kyuupichan/electrumx
-.. image:: https://coveralls.io/repos/github/kyuupichan/electrumx/badge.svg
-    :target: https://coveralls.io/github/kyuupichan/electrumx
+.. image:: https://travis-ci.org/NewYorkCoinNYC/electrumx.svg?branch=master
+    :target: https://travis-ci.org/NewYorkCoinNYC/electrumx
+.. image:: https://coveralls.io/repos/github/NewYorkCoinNYC/electrumx/badge.svg
+    :target: https://coveralls.io/github/NewYorkCoinNYC/electrumx
+
 
 ===============================================
 ElectrumX - Reimplementation of electrum-server
 ===============================================
 
+For a future network with bigger blocks.
+
   :Licence: MIT
-  :Language: Python (>= 3.7)
-  :Original Author: Neil Booth
-
-This project is a fork of `kyuupichan/electrumx <https://github.com/kyuupichan/electrumx>`_.
-The original author dropped support for Bitcoin, which we intend to keep.
-
-ElectrumX allows users to run their own Electrum server. It connects to your
-full node and indexes the blockchain, allowing efficient querying of history of
-arbitrary addresses. The server can be exposed publicly, and joined to the public network
-of servers via peer discovery. As of May 2020, a significant chunk of the public
-Electrum server network runs ElectrumX.
-
-Adding a new coin
-=================
-- Add an ansible setup script inside provisioning/tasks
-- Add parameters inside lib/coins.py
-
-Credits
-=======
-- `Dashboard by @Mirobit <https://github.com/Mirobit/electrumx-dashboard>`_.'
+  :Language: Python (>= 3.6)
+  :Author: Neil Booth
 
 Documentation
 =============
+
 See `readthedocs <https://electrumx.readthedocs.io/>`_.
 
+
+**Neil Booth**  kyuupichan@gmail.com  https://github.com/kyuupichan
+
+
+1BWwXJH3q6PRsizBkSGm2Uw4Sz1urZ5sCj

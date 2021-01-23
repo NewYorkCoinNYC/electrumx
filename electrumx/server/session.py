@@ -7,6 +7,7 @@
 
 '''Classes for local RPC server and remote client TCP/SSL servers.'''
 
+import asyncio
 import codecs
 import datetime
 import itertools
@@ -126,7 +127,6 @@ class SessionManager:
         self.txs_sent = 0
         self.start_time = time.time()
         self._method_counts = defaultdict(int)
-        self._reorg_count = 0
         self._history_cache = pylru.lrucache(1000)
         self._history_lookups = 0
         self._history_hits = 0
@@ -253,15 +253,6 @@ class SessionManager:
             await self._disconnect_sessions(stale_sessions, 'closing stale')
             del stale_sessions
 
-    async def _handle_chain_reorgs(self):
-        '''Clear caches on chain reorgs.'''
-        while True:
-            await self.bp.backed_up_event.wait()
-            self.logger.info(f'reorg signalled; clearing tx_hashes and merkle caches')
-            self._reorg_count += 1
-            self._tx_hashes_cache.clear()
-            self._merkle_cache.clear()
-
     async def _recalc_concurrency(self):
         '''Periodically recalculate session concurrency.'''
         session_class = self.env.coin.SESSIONCLS
@@ -297,7 +288,6 @@ class SessionManager:
             'daemon': self.daemon.logged_url(),
             'daemon height': self.daemon.cached_height(),
             'db height': self.db.db_height,
-            'db_flush_count': self.db.history.flush_count,
             'groups': len(self.session_groups),
             'history cache': cache_fmt.format(
                 self._history_lookups, self._history_hits, len(self._history_cache)),
@@ -500,7 +490,7 @@ class SessionManager:
         return self.peer_mgr.rpc_data()
 
     async def rpc_query(self, items, limit):
-        '''Returns data about a script, address or name.'''
+        '''Return a list of data about server peers.'''
         coin = self.env.coin
         db = self.db
         lines = []
@@ -515,20 +505,11 @@ class SessionManager:
 
             try:
                 hashX = coin.address_to_hashX(arg)
-                lines.append(f'Address: {arg}')
-                return hashX
-            except Base58Error:
-                pass
-
-            try:
-                script = coin.build_name_index_script(arg.encode("ascii"))
-                hashX = coin.name_hashX_from_script(script)
-                lines.append(f'Name: {arg}')
-                return hashX
-            except (AttributeError, UnicodeEncodeError):
-                pass
-
-            return None
+            except Base58Error as e:
+                lines.append(e.args[0])
+                return None
+            lines.append(f'Address: {arg}')
+            return hashX
 
         for arg in items:
             hashX = arg_to_hashX(arg)
@@ -615,7 +596,6 @@ class SessionManager:
             async with self._task_group as group:
                 await group.spawn(self.peer_mgr.discover_peers())
                 await group.spawn(self._clear_stale_sessions())
-                await group.spawn(self._handle_chain_reorgs())
                 await group.spawn(self._recalc_concurrency())
                 await group.spawn(self._log_sessions())
                 await group.spawn(self._manage_servers())
@@ -693,15 +673,10 @@ class SessionManager:
             self._tx_hashes_hits += 1
             return tx_hashes, 0.1
 
-        # Ensure the tx_hashes are fresh before placing in the cache
-        while True:
-            reorg_count = self._reorg_count
-            try:
-                tx_hashes = await self.db.tx_hashes_at_blockheight(height)
-            except self.db.DBError as e:
-                raise RPCError(BAD_REQUEST, f'db error: {e!r}')
-            if reorg_count == self._reorg_count:
-                break
+        try:
+            tx_hashes = await self.db.tx_hashes_at_blockheight(height)
+        except self.db.DBError as e:
+            raise RPCError(BAD_REQUEST, f'db error: {e!r}')
 
         self._tx_hashes_cache[height] = tx_hashes
 
@@ -756,6 +731,12 @@ class SessionManager:
 
     async def _notify_sessions(self, height, touched):
         '''Notify sessions about height changes and touched addresses.'''
+        # Invalidate our height-based caches in case of a reorg
+        for cache in (self._tx_hashes_cache, self._merkle_cache):
+            for key in range(height, self.db.db_height + 1):
+                if key in cache:
+                    del cache[key]
+
         height_changed = height != self.notified_height
         if height_changed:
             await self._refresh_hsub_results(height)
@@ -1239,19 +1220,15 @@ class ElectrumX(SessionBase):
         self.bump_cost(1.0)
         return await self.daemon_request('relayfee')
 
-    async def estimatefee(self, number, mode=None):
+    async def estimatefee(self, number):
         '''The estimated transaction fee per kilobyte to be paid for a
         transaction to be included within a certain number of blocks.
 
         number: the number of blocks
-        mode: CONSERVATIVE or ECONOMICAL estimation mode
         '''
         number = non_negative_integer(number)
         self.bump_cost(2.0)
-        if mode:
-            return await self.daemon_request('estimatefee', number, mode)
-        else:
-            return await self.daemon_request('estimatefee', number)
+        return await self.daemon_request('estimatefee', number)
 
     async def ping(self):
         '''Serves as a connection keep-alive mechanism and for the client to
@@ -1411,7 +1388,7 @@ class ElectrumX(SessionBase):
             'blockchain.transaction.get': self.transaction_get,
             'blockchain.transaction.get_merkle': self.transaction_merkle,
             'blockchain.transaction.id_from_pos': self.transaction_id_from_pos,
-            'mempool.get_fee_histogram': self.compact_fee_histogram,
+            'mempool.get_fee_histogram': self.mempool.compact_fee_histogram,
             'server.add_peer': self.add_peer,
             'server.banner': self.banner,
             'server.donation_address': self.donation_address,
@@ -1694,7 +1671,7 @@ class AuxPoWElectrumX(ElectrumX):
         headers = bytearray()
 
         while cursor < len(headers_full):
-            headers.extend(headers_full[cursor:cursor+self.coin.TRUNCATED_HEADER_SIZE])
+            headers.extend(headers_full[cursor:cursor+self.coin.BASIC_HEADER_SIZE])
             cursor += self.db.dynamic_header_len(height)
             height += 1
 

@@ -32,9 +32,8 @@ class WarmingUpError(Exception):
     '''Internal - when the daemon is warming up.'''
 
 
-class ServiceRefusedError(Exception):
-    '''Internal - when the daemon doesn't provide a JSON response, only an HTTP error, for
-    some reason.'''
+class WorkQueueFullError(Exception):
+    '''Internal - when the daemon's work queue is full.'''
 
 
 class Daemon(object):
@@ -43,7 +42,7 @@ class Daemon(object):
     WARMING_UP = -28
     id_counter = itertools.count()
 
-    def __init__(self, coin, url, *, max_workqueue=10, init_retry=0.25, max_retry=4.0):
+    def __init__(self, coin, url, max_workqueue=10, init_retry=0.25, max_retry=4.0):
         self.coin = coin
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.url_index = None
@@ -56,18 +55,6 @@ class Daemon(object):
         self.max_retry = max_retry
         self._height = None
         self.available_rpcs = {}
-        self.session = None
-
-    async def __aenter__(self):
-        self.session = aiohttp.ClientSession(connector=self.connector())
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        await self.session.close()
-        self.session = None
-
-    def connector(self):
-        return None
 
     def set_url(self, url):
         '''Set the URLS to the given list, and switch to the first one.'''
@@ -100,15 +87,24 @@ class Daemon(object):
             return True
         return False
 
+    def client_session(self):
+        '''An aiohttp client session.'''
+        return aiohttp.ClientSession()
+
     async def _send_data(self, data):
         async with self.workqueue_semaphore:
-            async with self.session.post(self.current_url(), data=data) as resp:
-                kind = resp.headers.get('Content-Type', None)
-                if kind == 'application/json':
-                    return await resp.json()
-                text = await resp.text()
-                text = text.strip() or resp.reason
-                raise ServiceRefusedError(text)
+            async with self.client_session() as session:
+                async with session.post(self.current_url(), data=data) as resp:
+                    kind = resp.headers.get('Content-Type', None)
+                    if kind == 'application/json':
+                        return await resp.json()
+                    # bitcoind's HTTP protocol "handling" is a bad joke
+                    text = await resp.text()
+                    if 'Work queue depth exceeded' in text:
+                        raise WorkQueueFullError
+                    text = text.strip() or resp.reason
+                    self.logger.error(text)
+                    raise DaemonError(text)
 
     async def _send(self, payload, processor):
         '''Send a payload to be converted to JSON.
@@ -121,7 +117,7 @@ class Daemon(object):
             now = time.time()
             if now - last_error_log > 60:
                 last_error_log = now
-                self.logger.error(f'{error}.  Retrying occasionally...')
+                self.logger.error(f'{error}  Retrying occasionally...')
             if retry == self.max_retry and self.failover():
                 retry = 0
 
@@ -137,24 +133,24 @@ class Daemon(object):
                     self.logger.info(on_good_message)
                 return result
             except asyncio.TimeoutError:
-                log_error('timeout error')
+                log_error('timeout error.')
             except aiohttp.ServerDisconnectedError:
-                log_error('disconnected')
+                log_error('disconnected.')
                 on_good_message = 'connection restored'
             except ConnectionResetError:
                 log_error('connection reset')
                 on_good_message = 'connection restored'
             except aiohttp.ClientConnectionError:
-                log_error('connection problem - check your daemon is running')
+                log_error('connection problem - is your daemon running?')
                 on_good_message = 'connection restored'
             except aiohttp.ClientError as e:
                 log_error(f'daemon error: {e}')
                 on_good_message = 'running normally'
-            except ServiceRefusedError as e:
-                log_error(f'daemon service refused: {e}')
-                on_good_message = 'running normally'
             except WarmingUpError:
-                log_error('starting up checking blocks')
+                log_error('starting up checking blocks.')
+                on_good_message = 'running normally'
+            except WorkQueueFullError:
+                log_error('work queue full.')
                 on_good_message = 'running normally'
 
             await asyncio.sleep(retry)
@@ -232,15 +228,12 @@ class Daemon(object):
         '''Update our record of the daemon's mempool hashes.'''
         return await self._send_single('getrawmempool')
 
-    async def estimatefee(self, block_count, estimate_mode=None):
+    async def estimatefee(self, block_count):
         '''Return the fee estimate for the block count.  Units are whole
         currency units per KB, e.g. 0.00000995, or -1 if no estimate
         is available.
         '''
-        if estimate_mode:
-            args = (block_count, estimate_mode)
-        else:
-            args = (block_count, )
+        args = (block_count, )
         if await self._is_rpc_available('estimatesmartfee'):
             estimate = await self._send_single('estimatesmartfee', args)
             return estimate.get('feerate', -1)
@@ -377,10 +370,6 @@ class LegacyRPCDaemon(Daemon):
         return timegm(time.strptime(t, "%Y-%m-%d %H:%M:%S %Z"))
 
 
-class FakeEstimateLegacyRPCDaemon(LegacyRPCDaemon, FakeEstimateFeeDaemon):
-    pass
-
-
 class DecredDaemon(Daemon):
     async def raw_blocks(self, hex_hashes):
         '''Return the raw binary blocks with the given hex hashes.'''
@@ -459,9 +448,10 @@ class DecredDaemon(Daemon):
         mempool += tip.get('stx', [])
         return mempool
 
-    def connector(self):
+    def client_session(self):
         # FIXME allow self signed certificates
-        return aiohttp.TCPConnector(verify_ssl=False)
+        connector = aiohttp.TCPConnector(verify_ssl=False)
+        return aiohttp.ClientSession(connector=connector)
 
 
 class PreLegacyRPCDaemon(LegacyRPCDaemon):
@@ -506,15 +496,3 @@ class ZcoinMtpDaemon(Daemon):
         blocks = await self._send_vector('getblock', params_iterable)
         # Convert hex string to bytes
         return [hex_to_bytes(self.strip_mtp_data(block)) for block in blocks]
-
-    async def masternode_broadcast(self, params):
-        '''Broadcast a transaction to the network.'''
-        return await self._send_single('znodebroadcast', params)
-
-    async def masternode_list(self, params):
-        '''Return the masternode status.'''
-        return await self._send_single('znodelist', params)
-
-    async def protx(self, params):
-        '''Set of commands to execute ProTx related actions.'''
-        return await self._send_single('protx', params)
